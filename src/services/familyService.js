@@ -61,3 +61,15 @@ export const getApiInfo = async () => {
   return response.data;
 };
 
+export const getAllCases = async (limit = 100, type = null) => {
+  const params = new URLSearchParams();
+  if (limit) params.append("limit", limit);
+  if (type) params.append("type", type);
+  
+  const queryString = params.toString();
+  const url = `/api/v1/search/cases/all${queryString ? `?${queryString}` : ""}`;
+  
+  const response = await apiClient.get(url);
+  return response.data;
+};
+

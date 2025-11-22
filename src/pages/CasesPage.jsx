@@ -1,46 +1,188 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-
-const spotlightCases = [
-  {
-    caseId: "DEMO_MISSING_001",
-    name: "Nguyễn Gia Hân",
-    age: 12,
-    lastSeen: "Đà Nẵng, 08/2024",
-    status: "Đang đối chiếu",
-    matchScore: 0.86,
-    summary:
-      "Cập nhật ảnh từ camera trường học và lời kể của bạn cùng lớp. AI đề xuất 2 điểm trùng khớp."
-  },
-  {
-    caseId: "DEMO_FOUND_014",
-    name: "Unidentified Male #014",
-    age: "20-25",
-    lastSeen: "TP.HCM, 10/2024",
-    status: "Chờ xác minh",
-    matchScore: 0.78,
-    summary:
-      "Được tìm thấy bởi đội cứu trợ B31. Kết quả gợi ý trùng với hồ sơ mất tích tại Cần Thơ."
-  },
-  {
-    caseId: "DEMO_MISSING_045",
-    name: "Phạm Thành Đạt",
-    age: 34,
-    lastSeen: "Hải Phòng, 05/2023",
-    status: "Ưu tiên cao",
-    matchScore: 0.91,
-    summary:
-      "Gia đình vừa cung cấp ảnh lúc trưởng thành. Hệ thống nhận diện cao với dữ liệu từ camera giao thông."
-  }
-];
-
-const pipelineStats = [
-  { label: "Hồ sơ missing mới", value: "128", trend: "+18% tuần này" },
-  { label: "Hồ sơ found mới", value: "76", trend: "+9% tuần này" },
-  { label: "Điểm trùng khớp", value: "34", trend: "12 ca mức cao" },
-  { label: "Thời gian phản hồi", value: "2.1s", trend: "-0.3s so với tuần trước" }
-];
+import { getAllCases } from "../services/familyService";
 
 export default function CasesPage() {
+  const [cases, setCases] = useState({ missing: [], found: [] });
+  const [allCasesList, setAllCasesList] = useState([]);
+  const [stats, setStats] = useState({
+    totalMissing: 0,
+    totalFound: 0,
+    totalCases: 0,
+    highPriorityCases: 0
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    fetchCases();
+  }, []);
+
+  const fetchCases = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await getAllCases(100);
+      
+      if (data.success) {
+        setCases(data.cases || { missing: [], found: [] });
+        // Combine and sort all cases by confidence score
+        const allCases = [
+          ...(data.cases?.missing || []).map(c => ({ ...c, type: 'missing' })),
+          ...(data.cases?.found || []).map(c => ({ ...c, type: 'found' }))
+        ].sort((a, b) => (b.confidence_score || 0) - (a.confidence_score || 0));
+        
+        setAllCasesList(allCases);
+        
+        // Calculate high priority cases (confidence >= 0.7)
+        const highPriorityCount = allCases.filter(c => (c.confidence_score || 0) >= 0.7).length;
+        
+        // Set stats
+        setStats({
+          totalMissing: data.statistics?.total_missing || 0,
+          totalFound: data.statistics?.total_found || 0,
+          totalCases: data.statistics?.total_cases || 0,
+          highPriorityCases: highPriorityCount
+        });
+      }
+    } catch (err) {
+      console.error("Failed to fetch cases:", err);
+      setError(err.message || "Không thể tải dữ liệu. Vui lòng thử lại sau.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Get top 3 cases with highest confidence scores for spotlight
+  const getSpotlightCases = () => {
+    const allCases = [
+      ...(cases.missing || []).map(c => ({ ...c, type: 'missing' })),
+      ...(cases.found || []).map(c => ({ ...c, type: 'found' }))
+    ]
+      .sort((a, b) => (b.confidence_score || 0) - (a.confidence_score || 0))
+      .slice(0, 3);
+    
+    return allCases.map((c) => {
+      const metadata = c.metadata || {};
+      const isMissing = c.type === 'missing';
+      
+      return {
+        caseId: isMissing ? metadata.case_id : metadata.found_id,
+        name: metadata.name || (isMissing ? "Người mất tích" : "Người được tìm thấy"),
+        age: isMissing 
+          ? metadata.age_at_disappearance 
+          : metadata.current_age_estimate || metadata.current_age_range,
+        lastSeen: isMissing 
+          ? `${metadata.location_last_seen || 'Không xác định'}, ${metadata.year_disappeared || ''}`
+          : `${metadata.current_location || 'Không xác định'}, ${new Date(metadata.upload_timestamp || Date.now()).toLocaleDateString('vi-VN')}`,
+        status: getStatus(c.confidence_level, c.confidence_score),
+        matchScore: c.confidence_score || 0,
+        summary: isMissing
+          ? metadata.description || `Mất tích năm ${metadata.year_disappeared || 'N/A'}. Độ tin cậy: ${((c.confidence_score || 0) * 100).toFixed(0)}%`
+          : metadata.description || `Được tìm thấy. Độ tin cậy: ${((c.confidence_score || 0) * 100).toFixed(0)}%`
+      };
+    });
+  };
+
+  const getStatus = (confidenceLevel, confidenceScore) => {
+    if (confidenceScore >= 0.8) return "Ưu tiên cao";
+    if (confidenceScore >= 0.7) return "Đang đối chiếu";
+    if (confidenceScore >= 0.6) return "Chờ xác minh";
+    return "Giám sát";
+  };
+
+  const formatCaseForTable = (caseItem) => {
+    const metadata = caseItem.metadata || {};
+    const isMissing = caseItem.type === 'missing';
+    
+    const caseId = isMissing ? metadata.case_id : metadata.found_id;
+    const name = metadata.name || (isMissing ? "Người mất tích" : "Người được tìm thấy");
+    const location = isMissing ? metadata.location_last_seen : metadata.current_location;
+    
+    // Format upload timestamp
+    const uploadTime = metadata.upload_timestamp;
+    let timeAgo = "Vừa xong";
+    if (uploadTime) {
+      const uploadDate = new Date(uploadTime);
+      const now = new Date();
+      const diffMs = now - uploadDate;
+      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+      const diffDays = Math.floor(diffHours / 24);
+      
+      if (diffDays > 0) {
+        timeAgo = `${diffDays} ngày trước`;
+      } else if (diffHours > 0) {
+        timeAgo = `${diffHours}h trước`;
+      } else {
+        const diffMins = Math.floor(diffMs / (1000 * 60));
+        timeAgo = diffMins > 0 ? `${diffMins} phút trước` : "Vừa xong";
+      }
+    }
+    
+    return {
+      caseId,
+      name,
+      type: isMissing ? "Hồ sơ Missing" : "Hồ sơ Found",
+      location: location || "Không xác định",
+      status: getStatus(caseItem.confidence_level, caseItem.confidence_score),
+      priority: caseItem.confidence_score >= 0.8 ? "Cao" : caseItem.confidence_score >= 0.6 ? "Trung bình" : "Giám sát",
+      timeAgo,
+      confidenceScore: caseItem.confidence_score || 0
+    };
+  };
+
+  const pipelineStats = [
+    { 
+      label: "Hồ sơ missing mới", 
+      value: stats.totalMissing.toString(), 
+      trend: `${stats.totalMissing} hồ sơ` 
+    },
+    { 
+      label: "Hồ sơ found mới", 
+      value: stats.totalFound.toString(), 
+      trend: `${stats.totalFound} hồ sơ` 
+    },
+    { 
+      label: "Điểm trùng khớp", 
+      value: stats.highPriorityCases.toString(), 
+      trend: `${stats.highPriorityCases} ca mức cao` 
+    },
+    { 
+      label: "Tổng số cases", 
+      value: stats.totalCases.toString(), 
+      trend: "Tất cả hồ sơ" 
+    }
+  ];
+
+  const spotlightCases = getSpotlightCases();
+  const tableCases = allCasesList.slice(0, 20).map(formatCaseForTable);
+
+  if (loading) {
+    return (
+      <div className="relative overflow-hidden bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+          <p className="mt-4 text-slate-300">Đang tải dữ liệu...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="relative overflow-hidden bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-400 mb-4">{error}</p>
+          <button
+            onClick={fetchCases}
+            className="rounded-2xl border border-white/20 px-4 py-2 text-sm font-semibold text-white hover:border-white/40"
+          >
+            Thử lại
+          </button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="relative overflow-hidden bg-slate-950 text-slate-100">
       <div className="pointer-events-none absolute inset-0">
@@ -73,31 +215,37 @@ export default function CasesPage() {
         </header>
 
         <section className="mt-12 grid gap-6 lg:grid-cols-3">
-          {spotlightCases.map((item) => (
-            <div
-              key={item.caseId}
-              className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-xl shadow-slate-900/40 backdrop-blur"
-            >
-              <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-widest text-primary-100">
-                {item.caseId}
-                <span className="rounded-full border border-white/20 px-3 py-0.5 text-white/80">
-                  {item.status}
-                </span>
-              </div>
-              <h3 className="mt-4 text-2xl font-bold text-white">{item.name}</h3>
-              <p className="text-sm text-slate-300">
-                Tuổi: {item.age} • Lần cuối: {item.lastSeen}
-              </p>
-              <p className="mt-4 text-sm text-slate-200">{item.summary}</p>
-              <div className="mt-5 rounded-2xl bg-slate-900/50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
-                  Độ tin cậy gợi ý
+          {spotlightCases.length > 0 ? (
+            spotlightCases.map((item, index) => (
+              <div
+                key={item.caseId || index}
+                className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-xl shadow-slate-900/40 backdrop-blur"
+              >
+                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-widest text-primary-100">
+                  {item.caseId || `CASE_${index + 1}`}
+                  <span className="rounded-full border border-white/20 px-3 py-0.5 text-white/80">
+                    {item.status}
+                  </span>
+                </div>
+                <h3 className="mt-4 text-2xl font-bold text-white">{item.name}</h3>
+                <p className="text-sm text-slate-300">
+                  Tuổi: {item.age || "N/A"} • Lần cuối: {item.lastSeen || "Không xác định"}
                 </p>
-                <p className="text-3xl font-bold text-white">{(item.matchScore * 100).toFixed(0)}%</p>
-                <p className="text-xs text-slate-400">Kết hợp similarity + confidence scoring</p>
+                <p className="mt-4 text-sm text-slate-200">{item.summary}</p>
+                <div className="mt-5 rounded-2xl bg-slate-900/50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
+                    Độ tin cậy gợi ý
+                  </p>
+                  <p className="text-3xl font-bold text-white">{(item.matchScore * 100).toFixed(0)}%</p>
+                  <p className="text-xs text-slate-400">Kết hợp similarity + confidence scoring</p>
+                </div>
               </div>
+            ))
+          ) : (
+            <div className="col-span-3 text-center py-8 text-slate-400">
+              Chưa có dữ liệu. Vui lòng thêm hồ sơ mới.
             </div>
-          ))}
+          )}
         </section>
 
         <section className="mt-14 rounded-[32px] border border-white/10 bg-white/5 p-8 shadow-2xl shadow-blue-900/30 backdrop-blur">
@@ -130,31 +278,33 @@ export default function CasesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5 bg-slate-950/30">
-                {Array.from({ length: 6 }).map((_, index) => (
-                  <tr key={index} className="hover:bg-white/5">
-                    <td className="px-4 py-3 font-mono text-xs text-primary-100">
-                      CASE_{180 + index}
+                {tableCases.length > 0 ? (
+                  tableCases.map((item, index) => (
+                    <tr key={item.caseId || index} className="hover:bg-white/5">
+                      <td className="px-4 py-3 font-mono text-xs text-primary-100">
+                        {item.caseId || `CASE_${index + 1}`}
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="font-semibold text-white">{item.type}</p>
+                        <p className="text-xs text-slate-400">{item.name}</p>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-300">{item.location}</td>
+                      <td className="px-4 py-3">
+                        <span className="rounded-full border border-white/20 px-3 py-1 text-xs">
+                          {item.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-primary-200">{item.priority}</td>
+                      <td className="px-4 py-3 text-xs text-slate-400">{item.timeAgo}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="6" className="px-4 py-8 text-center text-slate-400">
+                      Chưa có dữ liệu. Vui lòng thêm hồ sơ mới.
                     </td>
-                    <td className="px-4 py-3">
-                      <p className="font-semibold text-white">
-                        {index % 2 === 0 ? "Hồ sơ Missing" : "Hồ sơ Found"}
-                      </p>
-                      <p className="text-xs text-slate-400">Tải lên bởi đội trực {index + 1}</p>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-300">
-                      {index % 2 === 0 ? "Hà Nội" : "TP.HCM"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="rounded-full border border-white/20 px-3 py-1 text-xs">
-                        {index % 2 === 0 ? "Đang ghép" : "Đợi xác minh"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-primary-200">
-                      {index % 3 === 0 ? "Cao" : index % 3 === 1 ? "Trung bình" : "Giám sát"}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-400">{index + 1}h trước</td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
