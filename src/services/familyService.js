@@ -6,10 +6,24 @@ const jsonHeaders = {
   }
 };
 
-const buildFormData = (imageFile, metadata) => {
+const buildFormData = (imageFile, metadata, mode) => {
   const formData = new FormData();
   formData.append("image", imageFile);
-  formData.append("metadata", JSON.stringify(metadata));
+  
+  // Append each metadata field individually (BE expects Form fields, not JSON)
+  Object.keys(metadata).forEach((key) => {
+    const value = metadata[key];
+    // Only append non-empty values (except for required fields)
+    if (value !== null && value !== undefined && value !== "") {
+      // Convert arrays to comma-separated strings for fields like birthmarks, visible_marks
+      if (Array.isArray(value)) {
+        formData.append(key, value.join(","));
+      } else {
+        formData.append(key, value);
+      }
+    }
+  });
+  
   return formData;
 };
 
@@ -18,7 +32,7 @@ export const uploadMissingPerson = async ({ imageFile, metadata }) => {
     throw new Error("Vui lòng chọn ảnh cần tải lên.");
   }
 
-  const formData = buildFormData(imageFile, metadata);
+  const formData = buildFormData(imageFile, metadata, "missing");
 
   const response = await apiClient.post("/api/v1/upload/missing", formData, {
     headers: { "Content-Type": "multipart/form-data" }
@@ -32,7 +46,7 @@ export const uploadFoundPerson = async ({ imageFile, metadata }) => {
     throw new Error("Vui lòng chọn ảnh cần tải lên.");
   }
 
-  const formData = buildFormData(imageFile, metadata);
+  const formData = buildFormData(imageFile, metadata, "found");
 
   const response = await apiClient.post("/api/v1/upload/found", formData, {
     headers: { "Content-Type": "multipart/form-data" }

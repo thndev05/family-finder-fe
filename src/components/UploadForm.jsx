@@ -134,6 +134,13 @@ export default function UploadForm({ mode, onSubmit, loading }) {
         normalized[field] = Number(normalized[field]);
       }
     });
+    
+    // Map 'description' to 'additional_info' (BE expects 'additional_info')
+    if (normalized.description !== undefined) {
+      normalized.additional_info = normalized.description;
+      delete normalized.description;
+    }
+    
     // Remove empty optional fields for found mode
     if (mode === "found") {
       if (!normalized.name || normalized.name.trim() === "") {
@@ -141,7 +148,17 @@ export default function UploadForm({ mode, onSubmit, loading }) {
       } else {
         normalized.name = normalized.name.trim();
       }
+      // Remove empty additional_info
+      if (normalized.additional_info && normalized.additional_info.trim() === "") {
+        delete normalized.additional_info;
+      }
     }
+    
+    // Remove empty additional_info for missing mode too
+    if (mode === "missing" && normalized.additional_info && normalized.additional_info.trim() === "") {
+      delete normalized.additional_info;
+    }
+    
     return normalized;
   };
 

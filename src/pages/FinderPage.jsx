@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import ModeToggle from "../components/ModeToggle";
 import UploadForm from "../components/UploadForm";
 import ResultPanel from "../components/ResultPanel";
+import SearchResultPanel from "../components/SearchResultPanel";
 import StatCard from "../components/StatCard";
 import HealthStatus from "../components/HealthStatus";
 import Toast from "../components/Toast";
@@ -218,18 +219,16 @@ export default function FinderPage() {
           </div>
 
           {searchResult && (
-            <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white/60 p-4 text-sm text-slate-600">
+            <div className="mt-6">
               {searchResult.error ? (
-                <p className="text-rose-600">{searchResult.error}</p>
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-center">
+                  <p className="text-rose-600 font-semibold">{searchResult.error}</p>
+                </div>
               ) : (
-                <>
-                  <p className="font-semibold text-slate-900">
-                    Kết quả cho mã {searchResult.id}
-                  </p>
-                  <pre className="mt-3 max-h-64 overflow-auto rounded-xl bg-slate-900/90 p-4 text-xs text-slate-100">
-                    {JSON.stringify(searchResult.payload, null, 2)}
-                  </pre>
-                </>
+                <SearchResultPanel
+                  searchType={searchResult.type}
+                  data={searchResult.payload}
+                />
               )}
             </div>
           )}
