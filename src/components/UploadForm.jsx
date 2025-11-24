@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import PropTypes from "prop-types";
 
 const genderOptions = [
@@ -82,6 +82,7 @@ export default function UploadForm({ mode, onSubmit, loading }) {
   const [metadata, setMetadata] = useState(() => ({ ...templateByMode[mode] }));
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState("");
+  const fileInputRef = useRef(null);
 
   // Handle image preview - create object URL when image file changes
   useEffect(() => {
@@ -197,6 +198,20 @@ export default function UploadForm({ mode, onSubmit, loading }) {
     return errors;
   };
 
+  const handleReset = () => {
+    // Reset metadata to template
+    setMetadata({ ...templateByMode[mode] });
+    
+    // Clear image file and preview
+    setImageFile(null);
+    setImagePreview("");
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   const handleSubmit = (event) => {
     event.preventDefault();
     
@@ -283,6 +298,7 @@ export default function UploadForm({ mode, onSubmit, loading }) {
             Hỗ trợ JPG, PNG. Kích thước &lt; 10MB.
           </span>
           <input
+            ref={fileInputRef}
             type="file"
             accept="image/*"
             className="hidden"
@@ -298,13 +314,23 @@ export default function UploadForm({ mode, onSubmit, loading }) {
         </label>
       </div>
 
-      <button
-        type="submit"
-        disabled={loading}
-        className="w-full rounded-2xl bg-gradient-to-r from-primary-600 to-blue-600 px-6 py-3 text-base font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
-      >
-        {loading ? "Đang xử lý..." : "Phân tích & tìm kiếm"}
-      </button>
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={handleReset}
+          disabled={loading}
+          className="flex-1 rounded-2xl border-2 border-slate-300 bg-white px-6 py-3 text-base font-semibold text-slate-700 transition hover:bg-slate-50 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Xóa hết
+        </button>
+        <button
+          type="submit"
+          disabled={loading}
+          className="flex-1 rounded-2xl bg-gradient-to-r from-primary-600 to-blue-600 px-6 py-3 text-base font-semibold text-white shadow-lg shadow-primary-500/30 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          {loading ? "Đang xử lý..." : "Phân tích & tìm kiếm"}
+        </button>
+      </div>
     </form>
   );
 }
