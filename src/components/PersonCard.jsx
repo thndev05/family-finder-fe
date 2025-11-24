@@ -60,7 +60,7 @@ export default function PersonCard({ person }) {
             {metadata?.gender && (
               <p>
                 <span className="font-medium text-slate-500">Giới tính:</span>{" "}
-                {metadata.gender === "male" ? "Nam" : metadata.gender === "female" ? "Nữ" : "Không xác định"}
+                {metadata.gender === "male" ? "Nam" : "Nữ"}
               </p>
             )}
           </div>

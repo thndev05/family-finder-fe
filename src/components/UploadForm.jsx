@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import PropTypes from "prop-types";
+import ConfirmationModal from "./ConfirmationModal";
 
 const genderOptions = [
   { value: "male", label: "Nam" },
-  { value: "female", label: "Nữ" },
-  { value: "unknown", label: "Không xác định" }
+  { value: "female", label: "Nữ" }
 ];
 
 const missingTemplate = {
@@ -12,7 +12,7 @@ const missingTemplate = {
   name: "",
   age_at_disappearance: "",
   year_disappeared: "",
-  gender: "unknown",
+  gender: "male",
   location_last_seen: "",
   contact: "",
   description: ""
@@ -22,7 +22,7 @@ const foundTemplate = {
   found_id: "",
   name: "",
   current_age_estimate: "",
-  gender: "unknown",
+  gender: "male",
   current_location: "",
   finder_contact: "",
   description: ""
@@ -82,6 +82,8 @@ export default function UploadForm({ mode, onSubmit, loading }) {
   const [metadata, setMetadata] = useState(() => ({ ...templateByMode[mode] }));
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState("");
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [pendingPayload, setPendingPayload] = useState(null);
   const fileInputRef = useRef(null);
 
   // Handle image preview - create object URL when image file changes
@@ -171,10 +173,12 @@ export default function UploadForm({ mode, onSubmit, loading }) {
       if (!normalized.name || normalized.name.trim().length < 2) {
         errors.push("• Họ và tên phải có ít nhất 2 ký tự");
       }
-      if (!normalized.age_at_disappearance || normalized.age_at_disappearance < 0 || normalized.age_at_disappearance > 120) {
+      const age = normalized.age_at_disappearance;
+      if (age == null || age === '' || age < 0 || age > 120) {
         errors.push("• Tuổi khi mất tích phải là số từ 0 đến 120");
       }
-      if (!normalized.year_disappeared || normalized.year_disappeared < 1900 || normalized.year_disappeared > new Date().getFullYear()) {
+      const year = normalized.year_disappeared;
+      if (year == null || year === '' || year < 1900 || year > new Date().getFullYear()) {
         errors.push(`• Năm mất tích phải từ 1900 đến ${new Date().getFullYear()}`);
       }
       if (!normalized.location_last_seen || normalized.location_last_seen.trim().length < 3) {
@@ -184,7 +188,8 @@ export default function UploadForm({ mode, onSubmit, loading }) {
         errors.push("• Vui lòng nhập thông tin liên hệ");
       }
     } else {
-      if (!normalized.current_age_estimate || normalized.current_age_estimate < 0 || normalized.current_age_estimate > 120) {
+      const age = normalized.current_age_estimate;
+      if (age == null || age === '' || age < 0 || age > 120) {
         errors.push("• Độ tuổi hiện tại phải là số từ 0 đến 120");
       }
       if (!normalized.current_location || normalized.current_location.trim().length < 3) {
@@ -235,11 +240,27 @@ export default function UploadForm({ mode, onSubmit, loading }) {
       metadata: normalizeMetadata()
     };
 
-    onSubmit(payload);
+    // Show confirmation modal instead of submitting directly
+    setPendingPayload(payload);
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmSubmit = () => {
+    setShowConfirmModal(false);
+    if (pendingPayload) {
+      onSubmit(pendingPayload);
+      setPendingPayload(null);
+    }
+  };
+
+  const handleCancelConfirm = () => {
+    setShowConfirmModal(false);
+    setPendingPayload(null);
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <>
+      <form onSubmit={handleSubmit} className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2">
         {inputFields.map((field) => (
           <div key={field} className={field === "description" ? "md:col-span-2" : ""}>
@@ -332,6 +353,17 @@ export default function UploadForm({ mode, onSubmit, loading }) {
         </button>
       </div>
     </form>
+
+    {/* Confirmation Modal */}
+    <ConfirmationModal
+      isOpen={showConfirmModal}
+      onClose={handleCancelConfirm}
+      onConfirm={handleConfirmSubmit}
+      data={metadata}
+      mode={mode}
+      imagePreview={imagePreview}
+    />
+    </>
   );
 }
 
