@@ -25,23 +25,25 @@ export default function CasesPage() {
       const data = await getAllCases(100);
       
       if (data.success) {
-        setCases(data.cases || { missing: [], found: [] });
-        // Combine and sort all cases by confidence score
-        const allCases = [
-          ...(data.cases?.missing || []).map(c => ({ ...c, type: 'missing' })),
-          ...(data.cases?.found || []).map(c => ({ ...c, type: 'found' }))
-        ].sort((a, b) => (b.confidence_score || 0) - (a.confidence_score || 0));
+        // Backend returns flat array, need to group by type
+        const allCases = data.cases || [];
+        const missingCases = allCases.filter(c => c.type === 'missing');
+        const foundCases = allCases.filter(c => c.type === 'found');
         
-        setAllCasesList(allCases);
+        setCases({ missing: missingCases, found: foundCases });
+        
+        // Sort all cases by confidence score
+        const sortedCases = [...allCases].sort((a, b) => (b.confidence_score || 0) - (a.confidence_score || 0));
+        setAllCasesList(sortedCases);
         
         // Calculate high priority cases (confidence >= 0.7)
         const highPriorityCount = allCases.filter(c => (c.confidence_score || 0) >= 0.7).length;
         
-        // Set stats
+        // Set stats from backend response
         setStats({
-          totalMissing: data.statistics?.total_missing || 0,
-          totalFound: data.statistics?.total_found || 0,
-          totalCases: data.statistics?.total_cases || 0,
+          totalMissing: data.missing_count || 0,
+          totalFound: data.found_count || 0,
+          totalCases: data.total_count || 0,
           highPriorityCases: highPriorityCount
         });
       }
