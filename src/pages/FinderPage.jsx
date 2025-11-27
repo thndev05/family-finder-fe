@@ -10,6 +10,8 @@ import { parseValidationError } from "../utils/errorParser";
 import {
   uploadMissingPerson,
   uploadFoundPerson,
+  uploadMissingPersonBatch,
+  uploadFoundPersonBatch,
   searchMissingByCaseId,
   searchFoundById,
   getHealthStatus
@@ -57,16 +59,56 @@ export default function FinderPage() {
     setResult(null);
 
     try {
-      const data =
-        mode === "missing"
-          ? await uploadMissingPerson(payload)
-          : await uploadFoundPerson(payload);
+      let data;
+      
+      // Use batch upload if multiple images or explicitly flagged
+      if (payload.isBatch || (Array.isArray(payload.imageFiles) && payload.imageFiles.length > 1)) {
+        data =
+          mode === "missing"
+            ? await uploadMissingPersonBatch({
+                imageFiles: payload.imageFiles,
+                metadata: payload.metadata,
+                imageMetadataArray: payload.imageMetadataList || null
+              })
+            : await uploadFoundPersonBatch({
+                imageFiles: payload.imageFiles,
+                metadata: payload.metadata,
+                imageMetadataArray: payload.imageMetadataList || null
+              });
+      } else {
+        // Single image upload (backward compatible)
+        const imageFile = Array.isArray(payload.imageFiles) ? payload.imageFiles[0] : payload.imageFile;
+        data =
+          mode === "missing"
+            ? await uploadMissingPerson({ imageFile, metadata: payload.metadata })
+            : await uploadFoundPerson({ imageFile, metadata: payload.metadata });
+      }
+      
       setResult(data);
-      setToast({
-        message:
+      
+      // Enhanced success message for batch uploads
+      const imageCount = Array.isArray(payload.imageFiles) ? payload.imageFiles.length : 1;
+      const validCount = data.matching_images_count || (data.valid_images?.length || 0);
+      const refCount = data.reference_images_count || (data.reference_images?.length || 0);
+      
+      let message;
+      if (imageCount > 1) {
+        if (validCount > 0 && refCount > 0) {
+          message = `Đã tải lên ${imageCount} ảnh: ${validCount} ảnh dùng để tìm kiếm, ${refCount} ảnh lưu để tham khảo.`;
+        } else if (validCount > 0) {
+          message = `Đã tải lên ${imageCount} ảnh, tất cả đều dùng để tìm kiếm.`;
+        } else {
+          message = `Đã tải lên ${imageCount} ảnh (lưu để tham khảo).`;
+        }
+      } else {
+        message =
           mode === "missing"
             ? "Đăng ký hồ sơ thành công. Bạn có thể tiếp tục theo dõi kết quả."
-            : "Đã phân tích ảnh. Vui lòng kiểm tra danh sách gợi ý.",
+            : "Đã phân tích ảnh. Vui lòng kiểm tra danh sách gợi ý.";
+      }
+      
+      setToast({
+        message,
         type: "success"
       });
     } catch (error) {

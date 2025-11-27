@@ -55,6 +55,71 @@ export const uploadFoundPerson = async ({ imageFile, metadata }) => {
   return response.data;
 };
 
+// Multi-image batch upload functions
+const buildBatchFormData = (imageFiles, metadata, imageMetadataArray = null) => {
+  const formData = new FormData();
+  
+  // Append all images (BE expects field name "images" for batch upload)
+  imageFiles.forEach((file) => {
+    formData.append("images", file);
+  });
+  
+  // Append each metadata field individually
+  Object.keys(metadata).forEach((key) => {
+    const value = metadata[key];
+    if (value !== null && value !== undefined && value !== "") {
+      if (Array.isArray(value)) {
+        formData.append(key, value.join(","));
+      } else {
+        formData.append(key, value);
+      }
+    }
+  });
+  
+  // Append per-image metadata if provided
+  if (imageMetadataArray && imageMetadataArray.length > 0) {
+    formData.append("image_metadata_json", JSON.stringify(imageMetadataArray));
+  }
+  
+  return formData;
+};
+
+export const uploadMissingPersonBatch = async ({ imageFiles, metadata, imageMetadataArray = null }) => {
+  if (!imageFiles || imageFiles.length === 0) {
+    throw new Error("Vui lòng chọn ít nhất 1 ảnh cần tải lên.");
+  }
+  
+  if (imageFiles.length > 10) {
+    throw new Error("Tối đa 10 ảnh mỗi lần tải lên.");
+  }
+
+  const formData = buildBatchFormData(imageFiles, metadata, imageMetadataArray);
+
+  const response = await apiClient.post("/api/v1/upload/missing/batch", formData, {
+    headers: { "Content-Type": "multipart/form-data" }
+  });
+
+  return response.data;
+};
+
+export const uploadFoundPersonBatch = async ({ imageFiles, metadata, imageMetadataArray = null }) => {
+  if (!imageFiles || imageFiles.length === 0) {
+    throw new Error("Vui lòng chọn ít nhất 1 ảnh cần tải lên.");
+  }
+  
+  if (imageFiles.length > 10) {
+    throw new Error("Tối đa 10 ảnh mỗi lần tải lên.");
+  }
+
+  const formData = buildBatchFormData(imageFiles, metadata, imageMetadataArray);
+
+  const response = await apiClient.post("/api/v1/upload/found/batch", formData, {
+    headers: { "Content-Type": "multipart/form-data" }
+  });
+
+  return response.data;
+};
+
 export const searchMissingByCaseId = async (caseId) => {
   const response = await apiClient.get(`/api/v1/search/missing/${caseId}`);
   return response.data;
