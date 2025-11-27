@@ -146,7 +146,7 @@ export const getAllCases = async (limit = 100, type = null) => {
   if (type) params.append("type", type);
   
   const queryString = params.toString();
-  const url = `/api/v1/search/cases/all${queryString ? `?${queryString}` : ""}`;
+  const url = `/api/v1/cases/all${queryString ? `?${queryString}` : ""}`;
   
   const response = await apiClient.get(url);
   return response.data;
