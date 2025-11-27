@@ -80,26 +80,29 @@ const helperText = {
 
 export default function UploadForm({ mode, onSubmit, loading }) {
   const [metadata, setMetadata] = useState(() => ({ ...templateByMode[mode] }));
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState("");
+  const [imageFiles, setImageFiles] = useState([]);
+  const [imagePreviews, setImagePreviews] = useState([]);
+  const [imageMetadataList, setImageMetadataList] = useState([]); // Per-image metadata (photo_year)
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingPayload, setPendingPayload] = useState(null);
   const fileInputRef = useRef(null);
 
-  // Handle image preview - create object URL when image file changes
+  // Handle image previews - create object URLs when image files change
   useEffect(() => {
-    if (!imageFile) {
-      setImagePreview("");
-      return undefined;
+    const previews = imageFiles.map((file) => URL.createObjectURL(file));
+    setImagePreviews(previews);
+
+    // Initialize imageMetadataList if it's empty or doesn't match imageFiles length
+    if (imageMetadataList.length !== imageFiles.length) {
+      setImageMetadataList(
+        imageFiles.map((_, index) => imageMetadataList[index] || { photo_year: "" })
+      );
     }
 
-    const objectUrl = URL.createObjectURL(imageFile);
-    setImagePreview(objectUrl);
-
     return () => {
-      URL.revokeObjectURL(objectUrl);
+      previews.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [imageFile]);
+  }, [imageFiles]);
 
   const fields = useMemo(() => Object.keys(templateByMode[mode]), [mode]);
   const inputFields = useMemo(
@@ -116,15 +119,37 @@ export default function UploadForm({ mode, onSubmit, loading }) {
   };
 
   const handleFileChange = (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
 
-    if (!file.type.startsWith("image/")) {
+    // Validate all files are images
+    const invalidFiles = files.filter((file) => !file.type.startsWith("image/"));
+    if (invalidFiles.length > 0) {
       alert("Vui lòng chọn đúng định dạng ảnh.");
       return;
     }
 
-    setImageFile(file);
+    // Limit to 10 images total
+    const currentCount = imageFiles.length;
+    const newCount = currentCount + files.length;
+    if (newCount > 10) {
+      alert(`Tối đa 10 ảnh. Bạn đã chọn ${currentCount} ảnh, chỉ có thể thêm ${10 - currentCount} ảnh nữa.`);
+      const allowedFiles = files.slice(0, 10 - currentCount);
+      setImageFiles([...imageFiles, ...allowedFiles]);
+    } else {
+      setImageFiles([...imageFiles, ...files]);
+    }
+  };
+
+  const handleRemoveImage = (index) => {
+    setImageFiles(imageFiles.filter((_, i) => i !== index));
+    setImageMetadataList(imageMetadataList.filter((_, i) => i !== index));
+  };
+
+  const handleImageMetadataChange = (index, field, value) => {
+    setImageMetadataList((prev) =>
+      prev.map((item, idx) => (idx === index ? { ...item, [field]: value } : item))
+    );
   };
 
   const normalizeMetadata = () => {
@@ -207,9 +232,10 @@ export default function UploadForm({ mode, onSubmit, loading }) {
     // Reset metadata to template
     setMetadata({ ...templateByMode[mode] });
     
-    // Clear image file and preview
-    setImageFile(null);
-    setImagePreview("");
+    // Clear image files and previews
+    setImageFiles([]);
+    setImagePreviews([]);
+    setImageMetadataList([]);
     
     // Reset file input
     if (fileInputRef.current) {
@@ -220,8 +246,13 @@ export default function UploadForm({ mode, onSubmit, loading }) {
   const handleSubmit = (event) => {
     event.preventDefault();
     
-    if (!imageFile) {
-      alert("Vui lòng chọn ảnh trước khi gửi.");
+    if (imageFiles.length === 0) {
+      alert("Vui lòng chọn ít nhất 1 ảnh trước khi gửi.");
+      return;
+    }
+
+    if (imageFiles.length > 10) {
+      alert("Tối đa 10 ảnh mỗi lần tải lên.");
       return;
     }
 
@@ -236,8 +267,13 @@ export default function UploadForm({ mode, onSubmit, loading }) {
     }
 
     const payload = {
-      imageFile,
-      metadata: normalizeMetadata()
+      imageFiles: imageFiles.length > 1 ? imageFiles : imageFiles, // Always use array for batch
+      metadata: normalizeMetadata(),
+      imageMetadataList: imageMetadataList.map((item) => ({
+        ...item,
+        photo_year: item.photo_year ? Number(item.photo_year) : null // Convert to number or null
+      })),
+      isBatch: imageFiles.length > 1 // Flag to use batch endpoint
     };
 
     // Show confirmation modal instead of submitting directly
@@ -316,23 +352,85 @@ export default function UploadForm({ mode, onSubmit, loading }) {
             Tải ảnh {mode === "missing" ? "người mất tích" : "vừa tìm thấy"}
           </span>
           <span className="text-sm text-slate-500">
-            Hỗ trợ JPG, PNG. Kích thước &lt; 10MB.
+            Hỗ trợ JPG, PNG. Kích thước &lt; 10MB. Tối đa 10 ảnh (khuyến nghị 5-7 ảnh).
           </span>
           <input
             ref={fileInputRef}
             type="file"
             accept="image/*"
+            multiple
             className="hidden"
             onChange={handleFileChange}
           />
-          {imagePreview && (
-            <img
-              src={imagePreview}
-              alt="Preview"
-              className="mt-4 h-48 w-full rounded-2xl object-cover shadow-inner"
-            />
-          )}
         </label>
+        
+        {/* Image Previews */}
+        {imagePreviews.length > 0 && (
+          <div className="mt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-slate-700">
+                Đã chọn {imageFiles.length}/10 ảnh
+              </span>
+              {imageFiles.length < 10 && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  + Thêm ảnh
+                </button>
+              )}
+            </div>
+            <div className="space-y-3">
+              {imagePreviews.map((preview, index) => (
+                <div key={index} className="flex gap-3 rounded-xl border border-slate-200 bg-white p-3">
+                  <div className="relative group flex-shrink-0">
+                    <img
+                      src={preview}
+                      alt={`Preview ${index + 1}`}
+                      className="h-24 w-24 rounded-lg object-cover shadow-inner"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(index)}
+                      className="absolute top-1 right-1 rounded-full bg-rose-500 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-rose-600"
+                      title="Xóa ảnh"
+                    >
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                    <div className="absolute bottom-1 left-1 rounded bg-black/50 px-1.5 py-0.5 text-xs text-white">
+                      #{index + 1}
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      Năm chụp ảnh (tùy chọn)
+                    </label>
+                    <input
+                      type="number"
+                      min="1900"
+                      max={new Date().getFullYear()}
+                      value={imageMetadataList[index]?.photo_year || ""}
+                      onChange={(e) => handleImageMetadataChange(index, "photo_year", e.target.value)}
+                      placeholder="VD: 2010"
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-100"
+                    />
+                    <p className="mt-1 text-xs text-slate-400">
+                      Giúp tính tuổi chính xác hơn khi matching
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {imageFiles.length === 10 && (
+              <p className="text-xs text-slate-500 text-center">
+                Đã đạt giới hạn 10 ảnh. Xóa ảnh để thêm ảnh khác.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex gap-3">
@@ -361,7 +459,8 @@ export default function UploadForm({ mode, onSubmit, loading }) {
       onConfirm={handleConfirmSubmit}
       data={metadata}
       mode={mode}
-      imagePreview={imagePreview}
+      imagePreview={imagePreviews[0]} // Show first image in modal
+      imageCount={imageFiles.length}
     />
     </>
   );

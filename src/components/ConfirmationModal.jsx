@@ -1,6 +1,6 @@
 import PropTypes from "prop-types";
 
-export default function ConfirmationModal({ isOpen, onClose, onConfirm, data, mode, imagePreview }) {
+export default function ConfirmationModal({ isOpen, onClose, onConfirm, data, mode, imagePreview, imageCount = 1 }) {
   if (!isOpen) return null;
 
   const formatValue = (key, value) => {
@@ -48,12 +48,19 @@ export default function ConfirmationModal({ isOpen, onClose, onConfirm, data, mo
           {/* Image Preview */}
           {imagePreview && (
             <div className="mb-4">
-              <p className="mb-2 text-sm font-semibold text-slate-600">Ảnh đã tải lên:</p>
+              <p className="mb-2 text-sm font-semibold text-slate-600">
+                {imageCount > 1 ? `Ảnh đã tải lên (${imageCount} ảnh):` : "Ảnh đã tải lên:"}
+              </p>
               <img
                 src={imagePreview}
                 alt="Preview"
                 className="h-48 w-full rounded-xl object-cover shadow-md"
               />
+              {imageCount > 1 && (
+                <p className="mt-2 text-xs text-slate-500">
+                  Đang hiển thị ảnh đầu tiên. Tất cả {imageCount} ảnh sẽ được xử lý.
+                </p>
+              )}
             </div>
           )}
 
@@ -106,6 +113,7 @@ ConfirmationModal.propTypes = {
   onConfirm: PropTypes.func.isRequired,
   data: PropTypes.object.isRequired,
   mode: PropTypes.oneOf(["missing", "found"]).isRequired,
-  imagePreview: PropTypes.string
+  imagePreview: PropTypes.string,
+  imageCount: PropTypes.number
 };
 
